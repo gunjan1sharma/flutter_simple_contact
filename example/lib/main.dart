@@ -24,6 +24,76 @@ class _MyAppState extends State<MyApp> {
     super.initState();
   }
 
+  Future<void> fetchMobileAndNameOnly() async {
+    try {
+      final raw = await FlutterSimpleContact.fetchContactsRaw(
+        options: {
+          "handlePermission": true,
+          "mode": "unified",
+          "sort": "alphabetical",
+          "filters": {
+            "onlyWithPhone": true, // ✅ Only contacts with phone numbers
+            "onlyStarred": false,
+            "onlyWithPhoto": false,
+          },
+          "minimizeData": true, // ✅ Skip extra metadata queries
+          "advanced": {"enableProgressEvents": false, "includeNotes": false},
+        },
+      );
+
+      // Extract only name + phones
+      final contacts = (raw["contacts"] as List? ?? []).map((c) {
+        return {
+          "name": c["displayName"] ?? "Unknown",
+          "phones": c["phones"] ?? [],
+        };
+      }).toList();
+
+      debugPrint("Simple contacts: $contacts");
+    } catch (e) {
+      throw Exception('Failed to fetch contacts: $e');
+    }
+  }
+
+  Future<void> fetchRawDetailedContact() async {
+    final raw = await FlutterSimpleContact.fetchContactsRaw(
+      options: {
+        "handlePermission": true,
+        "mode": "unified",
+        "sort": "alphabetical",
+        "filters": {
+          "onlyWithPhone": false,
+          "onlyStarred": false,
+          "onlyWithPhoto": false,
+        },
+        "minimizeData": false,
+        "advanced": {
+          "enableProgressEvents": false,
+          "includeNotes":
+              false, // iOS notes entitlement required; keep false by default [web:77]
+        },
+      },
+    );
+
+    final contacts = (raw["contacts"] as List? ?? const []);
+    print('Raw contacts: ${contacts}');
+  }
+
+  Future<void> fetchMinContactTyped() async {
+    final res = await FlutterSimpleContact.fetchContacts(
+      options: SimpleFetchOptions(
+        handlePermission: true,
+        mode: SimpleContactMode.unified,
+        sort: SimpleSort.alphabetical,
+        filters: const SimpleFetchFilters(onlyWithPhone: true),
+      ),
+    );
+
+    debugPrint("ok=${res.ok} status=${res.status} err=${res.errorMessage}");
+    debugPrint("contacts=${res.contacts.length}");
+    debugPrint("contacts=${res.contacts.asMap().toString()}");
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -32,42 +102,7 @@ class _MyAppState extends State<MyApp> {
         body: Center(
           child: GestureDetector(
             onTap: () async {
-              final res = await FlutterSimpleContact.fetchContacts(
-                options: SimpleFetchOptions(
-                  handlePermission: true,
-                  mode: SimpleContactMode.unified,
-                  sort: SimpleSort.alphabetical,
-                  filters: const SimpleFetchFilters(onlyWithPhone: true),
-                ),
-              );
-
-              final raw = await FlutterSimpleContact.fetchContactsRaw(
-                options: {
-                  "handlePermission": true,
-                  "mode": "unified",
-                  "sort": "alphabetical",
-                  "filters": {
-                    "onlyWithPhone": false,
-                    "onlyStarred": false,
-                    "onlyWithPhoto": false,
-                  },
-                  "minimizeData": false,
-                  "advanced": {
-                    "enableProgressEvents": true,
-                    "includeNotes":
-                        false, // iOS notes entitlement required; keep false by default [web:77]
-                  },
-                },
-              );
-
-              final contacts = (raw["contacts"] as List? ?? const []);
-              print('Raw contacts: ${contacts}');
-
-              debugPrint(
-                "ok=${res.ok} status=${res.status} err=${res.errorMessage}",
-              );
-              debugPrint("contacts=${res.contacts.length}");
-              debugPrint("contacts=${res.contacts.asMap().toString()}");
+              await fetchMobileAndNameOnly();
             },
             child: Text('Running on: $_platformVersion\n'),
           ),

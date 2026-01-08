@@ -150,18 +150,6 @@ public class FlutterSimpleContactPlugin: NSObject, FlutterPlugin {
       CNContactThumbnailImageDataKey as CNKeyDescriptor
     ]
 
-//     if !minimizeData {
-//       // Add more metadata keys (safe/common). Add more in Batch 4 if needed.
-//       keys.append(CNContactEmailAddressesKey as CNKeyDescriptor)
-//       keys.append(CNContactPostalAddressesKey as CNKeyDescriptor)
-//       keys.append(CNContactUrlAddressesKey as CNKeyDescriptor)
-//       keys.append(CNContactSocialProfilesKey as CNKeyDescriptor)
-//       keys.append(CNContactBirthdayKey as CNKeyDescriptor)
-//       keys.append(CNContactInstantMessageAddressesKey as CNKeyDescriptor)
-//       keys.append(CNContactDatesKey as CNKeyDescriptor)
-//       keys.append(CNContactRelationsKey as CNKeyDescriptor)
-//       keys.append(CNContactNoteKey as CNKeyDescriptor) // may require entitlement in some cases
-//     }
 
 if !minimizeData {
   // Add more metadata keys (safe/common)
@@ -173,6 +161,9 @@ if !minimizeData {
   keys.append(CNContactInstantMessageAddressesKey as CNKeyDescriptor)
   keys.append(CNContactDatesKey as CNKeyDescriptor)
   keys.append(CNContactRelationsKey as CNKeyDescriptor)
+
+    keys.append(CNContactDepartmentNameKey as CNKeyDescriptor)
+  keys.append(CNContactJobTitleKey as CNKeyDescriptor)
 
   // ONLY add note key if explicitly requested (requires entitlement)
   if includeNotes {
@@ -198,71 +189,88 @@ if !minimizeData {
         let hasPhoto = contact.imageDataAvailable
         if onlyWithPhoto && !hasPhoto { return }
 
-        let emails = contact.emailAddresses.map { v in
+
+
+let phones = contact.phoneNumbers.map { labeledValue -> [String: Any] in
+  let number = labeledValue.value.stringValue
+  let label = CNLabeledValue<NSString>.localizedString(forLabel: labeledValue.label ?? "")
   return [
-    "address": v.value as String,
-    "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? "")
+    "number": number,
+    "label": label,
+    "normalizedNumber": NSNull()
   ]
+}.filter { phoneMap in
+  let n = phoneMap["number"] as? String ?? ""
+  return !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 }
 
-let websites = contact.urlAddresses.map { v in
-  return [
-    "url": v.value as String,
-    "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? "")
-  ]
+if onlyWithPhone && phones.isEmpty { return }
+
+let displayName = self.buildDisplayName(contact: contact)
+
+var map: [String: Any] = [
+  "id": contact.identifier,
+  "rawContactId": NSNull(),
+  "displayName": displayName,
+  "phones": phones,
+  "starred": NSNull(),
+  "hasPhoto": hasPhoto,
+  "lastModifiedMillis": NSNull()
+]
+
+// Add rich metadata ONLY when minimizeData == false
+if !minimizeData {
+  let emails = contact.emailAddresses.map { v in
+    return [
+      "address": v.value as String,
+      "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? "")
+    ]
+  }
+  map["emails"] = emails
+
+  let websites = contact.urlAddresses.map { v in
+    return [
+      "url": v.value as String,
+      "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? "")
+    ]
+  }
+  map["websites"] = websites
+
+  let addresses = contact.postalAddresses.map { v in
+    let a = v.value
+    return [
+      "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? ""),
+      "street": a.street,
+      "city": a.city,
+      "state": a.state,
+      "postalCode": a.postalCode,
+      "country": a.country,
+      "isoCountryCode": a.isoCountryCode
+    ]
+  }
+  map["addresses"] = addresses
+
+  // Organizations (iOS stores as single fields on contact)
+  if !contact.organizationName.isEmpty || !contact.departmentName.isEmpty || !contact.jobTitle.isEmpty {
+    let org: [String: Any] = [
+      "company": contact.organizationName,
+      "department": contact.departmentName,
+      "jobTitle": contact.jobTitle
+    ]
+    map["organizations"] = [org]
+  } else {
+    map["organizations"] = []
+  }
+
+  // Note (only if includeNotes is true)
+  if includeNotes {
+    map["note"] = contact.note.isEmpty ? NSNull() : contact.note
+  }
 }
 
-let addresses = contact.postalAddresses.map { v in
-  let a = v.value
-  return [
-    "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? ""),
-    "street": a.street,
-    "city": a.city,
-    "state": a.state,
-    "postalCode": a.postalCode,
-    "country": a.country,
-    "isoCountryCode": a.isoCountryCode
-  ]
-}
-
-        let phones = contact.phoneNumbers.map { labeledValue -> [String: Any] in
-          let number = labeledValue.value.stringValue
-          let label = CNLabeledValue<NSString>.localizedString(forLabel: labeledValue.label ?? "")
-          return [
-            "number": number,
-            "label": label,
-            "normalizedNumber": NSNull() // iOS doesn't provide normalized number reliably here
-          ]
-        }.filter { phoneMap in
-          let n = phoneMap["number"] as? String ?? ""
-          return !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-
-        if onlyWithPhone && phones.isEmpty { return }
-
-        let displayName = self.buildDisplayName(contact: contact)
-
-        var map: [String: Any] = [
-          "id": contact.identifier,
-          "rawContactId": NSNull(), // iOS doesn't expose raw-contact id like Android
-          "displayName": displayName,
-          "phones": phones,
-          "starred": NSNull(),
-          "hasPhoto": hasPhoto,
-          "lastModifiedMillis": NSNull(),
-          "emails": emails,
-          "addresses": addresses,
-          "websites": websites
-        ]
-
-        // Best-effort extras (do not promise availability)
-        if mode == "raw" {
-          // iOS has containers (accounts) but not raw contact rows in the same sense.
-          // We can attach container identifiers later in Batch 4 if you want.
-        }
-
-        out.append(map)
+out.append(map)
       }
+
 
       result([
         "ok": true,

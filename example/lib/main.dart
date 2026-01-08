@@ -102,7 +102,7 @@ class _MyAppState extends State<MyApp> {
         body: Center(
           child: GestureDetector(
             onTap: () async {
-              await fetchMobileAndNameOnly();
+              await fetchMinContactTyped();
             },
             child: Text('Running on: $_platformVersion\n'),
           ),

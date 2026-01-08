@@ -1,11 +1,11 @@
-# flutter_simple_contact
+# Flutter Simple Contact
 
 A lightweight (~2KB), transparent Flutter plugin for fetching contacts from Android and iOS with zero third-party dependencies. Built specifically for fintech and enterprise applications that require full control over contact data handling.
 
 [![pub package](https://img.shields.io/pub/v/flutter_simple_contact.svg)](https://pub.dev/packages/flutter_simple_contact)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-## Why flutter_simple_contact?
+## Why Flutter Simple Contact?
 
 - ** Zero Third-Party Dependencies**: Direct native implementation using Android ContactsContract and iOS Contacts framework
 - ** Lightweight**: Only ~5KB - no bloated dependencies
@@ -448,7 +448,7 @@ MIT License - see [LICENSE](LICENSE) file.
 **Developed by Gunjan Sharma**  
 _Full Stack System Architect & Tech Lead_
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](<[YOUR_LINKEDIN_URL](https://www.linkedin.com/in/gunjan1sharma/)>)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](<[https://www.linkedin.com/in/gunjan1sharma/](https://www.linkedin.com/in/gunjan1sharma/)>)
 [![Email](https://img.shields.io/badge/Email-Contact-red?style=flat&logo=gmail)](mailto:gunjan.sharmo@gmail.com)
 
 ### Note on This Package

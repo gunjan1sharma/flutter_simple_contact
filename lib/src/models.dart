@@ -34,6 +34,11 @@ class SimpleContact {
     "starred": starred,
     "hasPhoto": hasPhoto,
   };
+
+  @override
+  String toString() {
+    return toMap().toString();
+  }
 }
 
 class SimplePhone {
@@ -68,15 +73,41 @@ class SimpleFetchFilters {
   };
 }
 
+// class SimpleFetchOptions {
+//   final bool handlePermission;
+//   final SimpleContactMode mode;
+//   final SimpleSort sort;
+//   final SimpleFetchFilters filters;
+//
+//   /// For enterprise: if true, plugin will return only minimal subset
+//   /// (e.g., name + phones) and omit extra metadata where possible.
+//   final bool minimizeData;
+//
+//   const SimpleFetchOptions({
+//     this.handlePermission = true,
+//     this.mode = SimpleContactMode.unified,
+//     this.sort = SimpleSort.none,
+//     this.filters = const SimpleFetchFilters(),
+//     this.minimizeData = false,
+//   });
+//
+//   Map<String, dynamic> toMap() => {
+//     "handlePermission": handlePermission,
+//     "mode": mode.name,
+//     "sort": sort.name,
+//     "filters": filters.toMap(),
+//     "minimizeData": minimizeData,
+//   };
+// }
+
 class SimpleFetchOptions {
   final bool handlePermission;
   final SimpleContactMode mode;
   final SimpleSort sort;
   final SimpleFetchFilters filters;
-
-  /// For enterprise: if true, plugin will return only minimal subset
-  /// (e.g., name + phones) and omit extra metadata where possible.
   final bool minimizeData;
+
+  final SimpleAdvancedOptions advanced;
 
   const SimpleFetchOptions({
     this.handlePermission = true,
@@ -84,6 +115,7 @@ class SimpleFetchOptions {
     this.sort = SimpleSort.none,
     this.filters = const SimpleFetchFilters(),
     this.minimizeData = false,
+    this.advanced = const SimpleAdvancedOptions(),
   });
 
   Map<String, dynamic> toMap() => {
@@ -92,8 +124,10 @@ class SimpleFetchOptions {
     "sort": sort.name,
     "filters": filters.toMap(),
     "minimizeData": minimizeData,
+    "advanced": advanced.toMap(),
   };
 }
+
 
 class SimpleFetchResult {
   final bool ok;
@@ -116,5 +150,52 @@ class SimpleFetchResult {
     "errorCode": errorCode,
     "errorMessage": errorMessage,
     "contacts": contacts.map((c) => c.toMap()).toList(),
+  };
+}
+
+enum SimpleProgressEventType { started, progress, completed, error, cancelled }
+
+class SimpleProgressEvent {
+  final SimpleProgressEventType type;
+  final int? processed;
+  final int? total;
+  final String? message;
+
+  const SimpleProgressEvent({
+    required this.type,
+    this.processed,
+    this.total,
+    this.message,
+  });
+
+  static SimpleProgressEvent fromMap(Map<dynamic, dynamic> m) {
+    return SimpleProgressEvent(
+      type: SimpleProgressEventType.values.firstWhere(
+            (e) => e.name == (m['type'] as String? ?? 'progress'),
+        orElse: () => SimpleProgressEventType.progress,
+      ),
+      processed: m['processed'] as int?,
+      total: m['total'] as int?,
+      message: m['message'] as String?,
+    );
+  }
+}
+
+/// Advanced config (keep defaults simple)
+class SimpleAdvancedOptions {
+  /// iOS: CNContact.note requires entitlement; keep false by default [web:77][web:79]
+  final bool includeNotes;
+
+  /// If true, native side will send progress events (Dart can show dialog)
+  final bool enableProgressEvents;
+
+  const SimpleAdvancedOptions({
+    this.includeNotes = false,
+    this.enableProgressEvents = false,
+  });
+
+  Map<String, dynamic> toMap() => {
+    "includeNotes": includeNotes,
+    "enableProgressEvents": enableProgressEvents,
   };
 }

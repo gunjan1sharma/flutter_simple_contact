@@ -1,15 +1,37 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
-
 import 'models.dart';
 
 class FlutterSimpleContact {
   static const MethodChannel _channel = MethodChannel(
     'flutter_simple_contact/methods',
   );
+  static const EventChannel _events = EventChannel(
+    'flutter_simple_contact/events',
+  );
 
-  /// Fetch contacts from native layers.
-  /// Native side will: (optional) handle permission, fetch unified/raw, apply basic filters/sort.
+  static Stream<Map<dynamic, dynamic>> progressStreamRaw() =>
+      _events.receiveBroadcastStream().cast<Map<dynamic, dynamic>>();
+
+  /// NEW: returns raw maps for full metadata without expanding Dart models.
+  static Future<Map<String, dynamic>> fetchContactsRaw({
+    required Map<String, dynamic> options,
+  }) async {
+    final raw = await _channel.invokeMethod<Map>('fetchContacts', options);
+    return (raw ?? <dynamic, dynamic>{}).cast<String, dynamic>();
+  }
+
+  static Stream<SimpleProgressEvent> progressStream() {
+    return _events.receiveBroadcastStream().map((e) {
+      return SimpleProgressEvent.fromMap(e as Map);
+    });
+  }
+
+  static Future<void> cancelFetch() async {
+    await _channel.invokeMethod('cancelFetch');
+  }
+
   static Future<SimpleFetchResult> fetchContacts({
     required SimpleFetchOptions options,
   }) async {
@@ -43,10 +65,8 @@ class FlutterSimpleContact {
     }
   }
 
-  /// Utility: return in multiple formats
   static String toJsonString(SimpleFetchResult result) =>
       jsonEncode(result.toMap());
-
   static List<Map<String, dynamic>> toListOfMaps(SimpleFetchResult result) =>
       result.contacts.map((c) => c.toMap()).toList();
 

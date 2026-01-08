@@ -29,6 +29,7 @@ public class FlutterSimpleContactPlugin: NSObject, FlutterPlugin {
 
     let advanced = args["advanced"] as? [String: Any] ?? [:]
     let includeNotes = advanced["includeNotes"] as? Bool ?? false
+    let enableProgressEvents = advanced["enableProgressEvents"] as? Bool ?? false
 
 
     let onlyWithPhone = filters["onlyWithPhone"] as? Bool ?? false
@@ -197,6 +198,33 @@ if !minimizeData {
         let hasPhoto = contact.imageDataAvailable
         if onlyWithPhoto && !hasPhoto { return }
 
+        let emails = contact.emailAddresses.map { v in
+  return [
+    "address": v.value as String,
+    "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? "")
+  ]
+}
+
+let websites = contact.urlAddresses.map { v in
+  return [
+    "url": v.value as String,
+    "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? "")
+  ]
+}
+
+let addresses = contact.postalAddresses.map { v in
+  let a = v.value
+  return [
+    "label": CNLabeledValue<NSString>.localizedString(forLabel: v.label ?? ""),
+    "street": a.street,
+    "city": a.city,
+    "state": a.state,
+    "postalCode": a.postalCode,
+    "country": a.country,
+    "isoCountryCode": a.isoCountryCode
+  ]
+}
+
         let phones = contact.phoneNumbers.map { labeledValue -> [String: Any] in
           let number = labeledValue.value.stringValue
           let label = CNLabeledValue<NSString>.localizedString(forLabel: labeledValue.label ?? "")
@@ -221,7 +249,10 @@ if !minimizeData {
           "phones": phones,
           "starred": NSNull(),
           "hasPhoto": hasPhoto,
-          "lastModifiedMillis": NSNull()
+          "lastModifiedMillis": NSNull(),
+          "emails": emails,
+          "addresses": addresses,
+          "websites": websites
         ]
 
         // Best-effort extras (do not promise availability)
@@ -249,16 +280,7 @@ if !minimizeData {
         ])
       }}
 
-//     } catch {
-//       result([
-//         "ok": false,
-//         "status": "error",
-//         "errorCode": "ios_fetch_error",
-//         "errorMessage": error.localizedDescription,
-//         "contacts": []
-//       ])
-//     }
-//   }
+
 
   private func buildDisplayName(contact: CNContact) -> String {
     // Keep it predictable, no formatter dependency

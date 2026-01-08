@@ -41,6 +41,28 @@ class _MyAppState extends State<MyApp> {
                 ),
               );
 
+              final raw = await FlutterSimpleContact.fetchContactsRaw(
+                options: {
+                  "handlePermission": true,
+                  "mode": "unified",
+                  "sort": "alphabetical",
+                  "filters": {
+                    "onlyWithPhone": false,
+                    "onlyStarred": false,
+                    "onlyWithPhoto": false,
+                  },
+                  "minimizeData": false,
+                  "advanced": {
+                    "enableProgressEvents": true,
+                    "includeNotes":
+                        false, // iOS notes entitlement required; keep false by default [web:77]
+                  },
+                },
+              );
+
+              final contacts = (raw["contacts"] as List? ?? const []);
+              print('Raw contacts: ${contacts}');
+
               debugPrint(
                 "ok=${res.ok} status=${res.status} err=${res.errorMessage}",
               );

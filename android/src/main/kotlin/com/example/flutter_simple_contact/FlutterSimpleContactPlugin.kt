@@ -17,6 +17,10 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.Result
 
+import io.flutter.plugin.common.EventChannel
+import java.util.concurrent.atomic.AtomicBoolean
+
+
 class FlutterSimpleContactPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
 
   private lateinit var channel: MethodChannel
@@ -28,23 +32,56 @@ class FlutterSimpleContactPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
 
   private val REQ_CONTACTS = 7001
 
+  private var eventChannel: EventChannel? = null
+private var eventSink: EventChannel.EventSink? = null
+private val cancelRequested = AtomicBoolean(false)
+
+
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     applicationContext = binding.applicationContext
     channel = MethodChannel(binding.binaryMessenger, "flutter_simple_contact/methods")
     channel.setMethodCallHandler(this)
+
+    eventChannel = EventChannel(binding.binaryMessenger, "flutter_simple_contact/events")
+    eventChannel?.setStreamHandler(object : EventChannel.StreamHandler {
+    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+    eventSink = events
+  }
+  override fun onCancel(arguments: Any?) {
+    eventSink = null
+  }
+})
+
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)
     applicationContext = null
+    eventChannel?.setStreamHandler(null)
+eventChannel = null
+eventSink = null
+
   }
 
+  // override fun onMethodCall(call: MethodCall, result: Result) {
+  //   when (call.method) {
+  //     "fetchContacts" -> handleFetchContacts(call, result)
+  //     else -> result.notImplemented()
+  //   }
+  // }
+
   override fun onMethodCall(call: MethodCall, result: Result) {
-    when (call.method) {
-      "fetchContacts" -> handleFetchContacts(call, result)
-      else -> result.notImplemented()
+  when (call.method) {
+    "fetchContacts" -> handleFetchContacts(call, result)
+    "cancelFetch" -> {
+      cancelRequested.set(true)
+      eventSink?.success(mapOf("type" to "cancelled", "message" to "Cancel requested"))
+      result.success(true)
     }
+    else -> result.notImplemented()
   }
+}
+
 
   private fun handleFetchContacts(call: MethodCall, result: Result) {
     val ctx = applicationContext
@@ -150,7 +187,7 @@ class FlutterSimpleContactPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
     onlyWithPhoto: Boolean,
     minimizeData: Boolean,
   ): List<Map<String, Any?>> {
-
+eventSink?.success(mapOf("type" to "started", "message" to "Fetching contacts"))
     val projection = arrayOf(
       ContactsContract.Contacts._ID,
       ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
@@ -203,22 +240,40 @@ class FlutterSimpleContactPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
           fetchPhonesForContact(resolver, contactId) // still only phones for now; more metadata in later batch
         }
 
+        if (cancelRequested.get()) {
+  eventSink?.success(mapOf("type" to "cancelled", "message" to "Cancelled by user"))
+  break
+}
+
+val emails = if (minimizeData) emptyList<Map<String, Any?>>() else fetchEmails(resolver, contactId)
+val addresses = if (minimizeData) emptyList<Map<String, Any?>>() else fetchAddresses(resolver, contactId)
+val websites = if (minimizeData) emptyList<Map<String, Any?>>() else fetchWebsites(resolver, contactId)
+val orgs = if (minimizeData) emptyList<Map<String, Any?>>() else fetchOrganizations(resolver, contactId)
+
+// progress event (best-effort; total unknown with cursor unless you use cursor.count)
+eventSink?.success(mapOf("type" to "progress", "processed" to out.size + 1, "total" to null))
+
+
         if (onlyWithPhone && phones.isEmpty()) continue
 
-        out.add(
-          mapOf(
-            "id" to contactId,
-            "rawContactId" to null, // unified contact doesn't map to a single raw id
-            "displayName" to displayName,
-            "phones" to phones,
-            "starred" to starred,
-            "hasPhoto" to hasPhoto,
-            "lastModifiedMillis" to lastUpdated
-          )
-        )
+       out.add(
+  mapOf(
+    "id" to contactId,
+    "rawContactId" to null,
+    "displayName" to displayName,
+    "phones" to phones,
+    "emails" to emails,
+    "addresses" to addresses,
+    "websites" to websites,
+    "organizations" to orgs,
+    "starred" to starred,
+    "hasPhoto" to hasPhoto,
+    "lastModifiedMillis" to lastUpdated
+  )
+)
       }
     }
-
+eventSink?.success(mapOf("type" to "completed", "message" to "Completed"))
     return out
   }
 
@@ -456,4 +511,159 @@ class FlutterSimpleContactPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
   override fun onDetachedFromActivity() {
     activity = null
   }
+
+  private fun fetchEmails(resolver: ContentResolver, contactId: String): List<Map<String, Any?>> {
+  val out = ArrayList<Map<String, Any?>>()
+  resolver.query(
+    ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+    arrayOf(
+      ContactsContract.CommonDataKinds.Email.ADDRESS,
+      ContactsContract.CommonDataKinds.Email.TYPE,
+      ContactsContract.CommonDataKinds.Email.LABEL
+    ),
+    "${ContactsContract.CommonDataKinds.Email.CONTACT_ID}=?",
+    arrayOf(contactId),
+    null
+  )?.use { c ->
+    val addrIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.ADDRESS)
+    val typeIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.TYPE)
+    val labelIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.LABEL)
+    while (c.moveToNext()) {
+      val address = c.getString(addrIdx) ?: ""
+      if (address.isBlank()) continue
+      val type = c.getInt(typeIdx)
+      val customLabel = if (c.isNull(labelIdx)) null else c.getString(labelIdx)
+      val label = ContactsContract.CommonDataKinds.Email.getTypeLabel(
+        applicationContext?.resources, type, customLabel
+      )?.toString()
+      out.add(mapOf("address" to address, "label" to label))
+    }
+  }
+  return out
+}
+
+private fun fetchWebsites(resolver: ContentResolver, contactId: String): List<Map<String, Any?>> {
+  val out = ArrayList<Map<String, Any?>>()
+  val projection = arrayOf(
+    ContactsContract.Data.DATA1, // website URL
+    ContactsContract.Data.DATA2, // type
+    ContactsContract.Data.DATA3  // custom label
+  )
+  val selection = "${ContactsContract.Data.CONTACT_ID}=? AND ${ContactsContract.Data.MIMETYPE}=?"
+  val args = arrayOf(contactId, ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE)
+
+  resolver.query(ContactsContract.Data.CONTENT_URI, projection, selection, args, null)?.use { c ->
+    val urlIdx = c.getColumnIndexOrThrow(ContactsContract.Data.DATA1)
+    val typeIdx = c.getColumnIndexOrThrow(ContactsContract.Data.DATA2)
+    val labelIdx = c.getColumnIndexOrThrow(ContactsContract.Data.DATA3)
+    
+    while (c.moveToNext()) {
+      val url = c.getString(urlIdx) ?: ""
+      if (url.isBlank()) continue
+      
+      val type = c.getInt(typeIdx)
+      val customLabel = if (c.isNull(labelIdx)) null else c.getString(labelIdx)
+      
+      // Website doesn't have getTypeLabel in Android; build label manually
+      val label = when {
+        customLabel != null -> customLabel
+        type == ContactsContract.CommonDataKinds.Website.TYPE_HOMEPAGE -> "Homepage"
+        type == ContactsContract.CommonDataKinds.Website.TYPE_BLOG -> "Blog"
+        type == ContactsContract.CommonDataKinds.Website.TYPE_PROFILE -> "Profile"
+        type == ContactsContract.CommonDataKinds.Website.TYPE_HOME -> "Home"
+        type == ContactsContract.CommonDataKinds.Website.TYPE_WORK -> "Work"
+        type == ContactsContract.CommonDataKinds.Website.TYPE_FTP -> "FTP"
+        type == ContactsContract.CommonDataKinds.Website.TYPE_OTHER -> "Other"
+        else -> "Website"
+      }
+      
+      out.add(mapOf("url" to url, "label" to label))
+    }
+  }
+  return out
+}
+
+
+private fun fetchAddresses(resolver: ContentResolver, contactId: String): List<Map<String, Any?>> {
+  val out = ArrayList<Map<String, Any?>>()
+  resolver.query(
+    ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_URI,
+    arrayOf(
+      ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS,
+      ContactsContract.CommonDataKinds.StructuredPostal.STREET,
+      ContactsContract.CommonDataKinds.StructuredPostal.CITY,
+      ContactsContract.CommonDataKinds.StructuredPostal.REGION,
+      ContactsContract.CommonDataKinds.StructuredPostal.POSTCODE,
+      ContactsContract.CommonDataKinds.StructuredPostal.COUNTRY,
+      ContactsContract.CommonDataKinds.StructuredPostal.TYPE,
+      ContactsContract.CommonDataKinds.StructuredPostal.LABEL
+    ),
+    "${ContactsContract.CommonDataKinds.StructuredPostal.CONTACT_ID}=?",
+    arrayOf(contactId),
+    null
+  )?.use { c ->
+    val fmtIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS)
+    val streetIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.STREET)
+    val cityIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.CITY)
+    val regionIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.REGION)
+    val pcIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.POSTCODE)
+    val countryIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.COUNTRY)
+    val typeIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.TYPE)
+    val labelIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.StructuredPostal.LABEL)
+
+    while (c.moveToNext()) {
+      val type = c.getInt(typeIdx)
+      val customLabel = if (c.isNull(labelIdx)) null else c.getString(labelIdx)
+      // val label = ContactsContract.CommonDataKinds.StructuredPostal.getTypeLabel(
+      //   applicationContext?.resources, type, customLabel
+      // )?.toString()
+
+val label = ContactsContract.CommonDataKinds.StructuredPostal.getTypeLabel(
+  applicationContext?.resources,
+  type,
+  customLabel
+)?.toString()
+
+
+      out.add(mapOf(
+        "formattedAddress" to (c.getString(fmtIdx) ?: ""),
+        "street" to (c.getString(streetIdx) ?: ""),
+        "city" to (c.getString(cityIdx) ?: ""),
+        "region" to (c.getString(regionIdx) ?: ""),
+        "postcode" to (c.getString(pcIdx) ?: ""),
+        "country" to (c.getString(countryIdx) ?: ""),
+        "label" to label
+      ))
+    }
+  }
+  return out
+}
+
+private fun fetchOrganizations(resolver: ContentResolver, contactId: String): List<Map<String, Any?>> {
+  val out = ArrayList<Map<String, Any?>>()
+  resolver.query(
+    ContactsContract.Data.CONTENT_URI,
+    arrayOf(
+      ContactsContract.CommonDataKinds.Organization.COMPANY,
+      ContactsContract.CommonDataKinds.Organization.TITLE,
+      ContactsContract.CommonDataKinds.Organization.DEPARTMENT
+    ),
+    "${ContactsContract.Data.CONTACT_ID}=? AND ${ContactsContract.Data.MIMETYPE}=?",
+    arrayOf(contactId, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE),
+    null
+  )?.use { c ->
+    val compIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Organization.COMPANY)
+    val titleIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Organization.TITLE)
+    val deptIdx = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Organization.DEPARTMENT)
+    while (c.moveToNext()) {
+      out.add(mapOf(
+        "company" to (c.getString(compIdx) ?: ""),
+        "title" to (c.getString(titleIdx) ?: ""),
+        "department" to (c.getString(deptIdx) ?: "")
+      ))
+    }
+  }
+  return out
+}
+
 }

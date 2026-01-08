@@ -7,13 +7,13 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 class MockFlutterSimpleContactPlatform
     with MockPlatformInterfaceMixin
     implements FlutterSimpleContactPlatform {
-
   @override
   Future<String?> getPlatformVersion() => Future.value('42');
 }
 
 void main() {
-  final FlutterSimpleContactPlatform initialPlatform = FlutterSimpleContactPlatform.instance;
+  final FlutterSimpleContactPlatform initialPlatform =
+      FlutterSimpleContactPlatform.instance;
 
   test('$MethodChannelFlutterSimpleContact is the default instance', () {
     expect(initialPlatform, isInstanceOf<MethodChannelFlutterSimpleContact>());
@@ -21,7 +21,8 @@ void main() {
 
   test('getPlatformVersion', () async {
     FlutterSimpleContact flutterSimpleContactPlugin = FlutterSimpleContact();
-    MockFlutterSimpleContactPlatform fakePlatform = MockFlutterSimpleContactPlatform();
+    MockFlutterSimpleContactPlatform fakePlatform =
+        MockFlutterSimpleContactPlatform();
     FlutterSimpleContactPlatform.instance = fakePlatform;
 
     expect(await flutterSimpleContactPlugin.getPlatformVersion(), '42');

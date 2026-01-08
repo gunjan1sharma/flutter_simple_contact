@@ -128,7 +128,6 @@ class SimpleFetchOptions {
   };
 }
 
-
 class SimpleFetchResult {
   final bool ok;
   final String status; // success | permission_denied | cancelled | error
@@ -171,7 +170,7 @@ class SimpleProgressEvent {
   static SimpleProgressEvent fromMap(Map<dynamic, dynamic> m) {
     return SimpleProgressEvent(
       type: SimpleProgressEventType.values.firstWhere(
-            (e) => e.name == (m['type'] as String? ?? 'progress'),
+        (e) => e.name == (m['type'] as String? ?? 'progress'),
         orElse: () => SimpleProgressEventType.progress,
       ),
       processed: m['processed'] as int?,

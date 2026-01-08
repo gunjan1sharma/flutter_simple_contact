@@ -8,7 +8,8 @@ abstract class FlutterSimpleContactPlatform extends PlatformInterface {
 
   static final Object _token = Object();
 
-  static FlutterSimpleContactPlatform _instance = MethodChannelFlutterSimpleContact();
+  static FlutterSimpleContactPlatform _instance =
+      MethodChannelFlutterSimpleContact();
 
   /// The default instance of [FlutterSimpleContactPlatform] to use.
   ///
